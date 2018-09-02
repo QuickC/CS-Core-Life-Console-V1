@@ -20,14 +20,13 @@ namespace CS_Life_Console_v5
             _displayViewY = (_YSIZE - _WINDOW_HEIGHT) / 2;                 //start row location to display
             _updateCellsTask = new Task(lifeLoopTask);
             _updateCellsTask.Start();                   // start the calc thread
-            _nextTestCells[0] = _TEST_CELL_END;                        // set list end
+            //_nextTestCells[0] = _TEST_CELL_END;                        // set list end
         }
 
         ~GameOfLife() => Dispose(false);
 
         // member private const fields
         private const int _LIFE_SIZE = _XSIZE * _YSIZE;
-
         private const int _MASK = _LIFE_SIZE - 1;
         private const int _NEIGHBOR_EE = 1 + _LIFE_SIZE;
         private const int _NEIGHBOR_NE = -_XSIZE + 1 + _LIFE_SIZE;
@@ -38,40 +37,29 @@ namespace CS_Life_Console_v5
         private const int _NEIGHBOR_SW = _XSIZE - 1 + _LIFE_SIZE;
         private const int _NEIGHBOR_WW = -1 + _LIFE_SIZE;
         private const int _NS_TO_SEC = 1000000;
-        private const int _TEST_CELL_END = -1;
         private const int _WINDOW_HEIGHT = 26;
         private const int _WINDOW_WIDTH = 80;
-        private const int _XSIZE = 1024;
+        private const int _XSIZE = 256;
         private const int _XSIZE_MINUS_WINDOW_WIDTH = _XSIZE - 1 - _WINDOW_WIDTH;
         private const int _YSIZE = _XSIZE;
         private const int _YSIZE_MINUS_WINDOW_HEIGHT = _YSIZE - 1 - _WINDOW_HEIGHT;
 
         // private objects
-        private readonly StringBuilder _displayString = new StringBuilder();
-
-        private readonly Stopwatch _drawTimer = new Stopwatch();
-
-        // private arrays
-        private readonly long[] _livingAvg = new long[10];
-
-        private readonly int[] _nextTestCells = new int[_LIFE_SIZE];
-        private readonly Random _randomLocation = new Random(_LIFE_SIZE);
-        private readonly Stopwatch _stepTimer = new Stopwatch();
-        private readonly long _stopwatchFreq = Stopwatch.Frequency;
-        private readonly int[] _testCells = new int[_LIFE_SIZE];
-        private readonly byte[] _testMap = new byte[_LIFE_SIZE];
-        private readonly Task _updateCellsTask;
+        private StringBuilder _displayString = new StringBuilder();
+        private Stopwatch _drawTimer = new Stopwatch();
+        private long[] _livingAvg = new long[10];
+        private byte[] _lastMap = new byte[_LIFE_SIZE];
+        private Random _randomLocation = new Random(_LIFE_SIZE);
+        private Stopwatch _stepTimer = new Stopwatch();
+        private long _stopwatchFreq = Stopwatch.Frequency;
+        private Task _updateCellsTask;
 
         // private mutable
         private int _aliveThisStep = 0;
-
-        private bool _allCellUpdate = true;
-        private int _cellAddPtr = 0;
         private LMode _currentMode = LMode.STEP;
         private int _displayViewX = 0;
         private int _displayViewY = 0;
         private bool _disposed = false;
-        private byte[] _lastMap = new byte[_LIFE_SIZE];
         private int _livesAccum = 0;
         private int _neighborCount = 0;
         private long _nsPerStep = 0;
@@ -132,7 +120,7 @@ namespace CS_Life_Console_v5
                 for (int x = 0; x <= (_WINDOW_WIDTH - 1); x++)
                 {
                     dx = _displayViewX + dy + x;                     //calc offest xnto the array for the col data
-                    _displayString.Append(_workMap[dx] == 1 ? "#" : " ");
+                    _displayString.Append(_lastMap[dx] == 1 ? "#" : " ");
                 }
                 _displayString.AppendLine();                // carraxge return for the end of the cols
             }
@@ -152,36 +140,12 @@ namespace CS_Life_Console_v5
         }
 
         // private methods
-        private void addTests(int cell)
-        {
-            _livesAccum++;
-            addToTestMap(cell);
-            addToTestMap((cell + _NEIGHBOR_NW) & _MASK);
-            addToTestMap((cell + _NEIGHBOR_NN) & _MASK);
-            addToTestMap((cell + _NEIGHBOR_NE) & _MASK);
-            addToTestMap((cell + _NEIGHBOR_WW) & _MASK);
-            addToTestMap((cell + _NEIGHBOR_EE) & _MASK);
-            addToTestMap((cell + _NEIGHBOR_SW) & _MASK);
-            addToTestMap((cell + _NEIGHBOR_SS) & _MASK);
-            addToTestMap((cell + _NEIGHBOR_SE) & _MASK);
-        }
-
         private void addToMapViewCentered(int row, int col)
         {
             int dx = (_XSIZE / 2) + row;                        // local var - lower_case
             int dy = ((_YSIZE / 2) + col) * _XSIZE;
             _workMap[dx + dy] = 1;
             _lastMap[dx + dy] = 1;
-        }
-
-        private void addToTestMap(int cell)
-        {
-            if (_testMap[cell] == 0)
-            {
-                _testMap[cell] = 1;
-                _nextTestCells[_cellAddPtr] = cell;
-                _cellAddPtr++;
-            }
         }
 
         private void averageStepTime()
@@ -263,35 +227,19 @@ namespace CS_Life_Console_v5
                     break;
             }
             _currentMode = newMode;
-            _allCellUpdate = true;
         }
 
         private void checkAllCells()
         {
-            _cellAddPtr = 0;
             _livesAccum = 0;
             int nextCell = 0;
 
-            if (_allCellUpdate)               // test all cells
+            while (nextCell < _LIFE_SIZE)
             {
-                while (nextCell < _LIFE_SIZE)
-                {
-                    countNeighbors(nextCell);
-                    nextCell++;
-                }
+                countNeighbors(nextCell);
+                nextCell++;
             }
-            else
-            {                                 // test only testcells
-                while (_testCells[nextCell] != _TEST_CELL_END)
-                {
-                    countNeighbors(_testCells[nextCell]);
-                    nextCell++;
-                }
-            }
-
-            _allCellUpdate = false;
             _aliveThisStep = _livesAccum;
-            _nextTestCells[_cellAddPtr] = _TEST_CELL_END;
         }
 
         private void countNeighbors(int cell)
@@ -309,20 +257,20 @@ namespace CS_Life_Console_v5
             {                                 // switch case on the number of cells alive around our test cell
                 case 2:
                     _workMap[cell] = _lastMap[cell];
+                    if(_workMap[cell] == 1)
+                    {
+                        _livesAccum++;
+                    }
                     break;
 
                 case 3:                         // if three it is always alive
                     _workMap[cell] = 1;
+                    _livesAccum++;
                     break;
 
                 default:                        // if other then dead
                     _workMap[cell] = 0;
                     break;
-            }
-
-            if (_workMap[cell] == 1)
-            {
-                addTests(cell);
             }
         }
 
@@ -341,7 +289,6 @@ namespace CS_Life_Console_v5
 
                 if (NextMode == LMode.STEP)
                 {                                      // if we are in single step mode
-                    _allCellUpdate = true;
                     nextStep();                         // update a tick
                     NextMode = LMode.IDLE;              // clear flag so we only do it once
                 }
@@ -357,16 +304,11 @@ namespace CS_Life_Console_v5
         {
             _stepTimer.Restart();
 
-            for (int i = 0; i < _cellAddPtr; ++i)
-            {
-                _testMap[_nextTestCells[i]] = 0;       // reset testboard
-            }
             _swapMap = _lastMap;                      // swap boards
             _lastMap = _workMap;
             _workMap = _swapMap;
 
             Array.Clear(_workMap, 0, _LIFE_SIZE);
-            Array.Copy(_nextTestCells, _testCells, _cellAddPtr + 1);
 
             checkAllCells();
 
